@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bot Control Panel</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a10;
+    color: #c8c8ff;
+    font-family: 'Segoe UI', sans-serif;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: #12121e;
+    border-bottom: 1px solid #2a2a45;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header h1 { font-size: 16px; color: #a0a0ff; letter-spacing: 1px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #444; display: inline-block; margin-right: 6px; }
+  .status-dot.online { background: #4caf50; box-shadow: 0 0 6px #4caf50; }
+  #status-text { font-size: 12px; color: #888; }
+
+  /* ── Config bar ── */
+  .config-bar {
+    background: #0f0f1a;
+    border-bottom: 1px solid #1e1e32;
+    padding: 10px 24px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .config-bar label { font-size: 11px; color: #666; }
+  .config-bar input, .config-bar select {
+    background: #18182a;
+    border: 1px solid #2a2a45;
+    color: #c8c8ff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    outline: none;
+  }
+  .config-bar input:focus, .config-bar select:focus { border-color: #5050a0; }
+  #arg-input { width: 220px; }
+  #target-input { width: 140px; }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    padding: 12px 24px 0;
+    border-bottom: 1px solid #1e1e32;
+    overflow-x: auto;
+  }
+  .tab {
+    padding: 8px 18px;
+    border-radius: 8px 8px 0 0;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    background: #18182a;
+    color: #666;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .tab:hover { color: #aaa; }
+  .tab.active { color: #fff; }
+
+  /* ── Grid de botones ── */
+  .content { padding: 20px 24px; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+
+  .cmd-btn {
+    background: #12121e;
+    border: 1px solid #1e1e32;
+    border-radius: 8px;
+    padding: 12px 10px 10px 14px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.12s;
+    position: relative;
+    overflow: hidden;
+  }
+  .cmd-btn:hover { background: #1a1a2e; border-color: #3a3a60; transform: translateY(-1px); }
+  .cmd-btn:active { transform: translateY(0); }
+  .cmd-btn.flash { background: var(--cat-color) !important; }
+
+  .cmd-btn .bar {
+    position: absolute;
+    left: 0; top: 6px; bottom: 6px;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
+    background: var(--cat-color);
+  }
+  .cmd-btn .name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #d0d0f0;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .cmd-btn .desc {
+    font-size: 10px;
+    color: #555;
+    display: block;
+  }
+
+  /* ── Log ── */
+  .log-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: #0c0c16;
+    border-top: 1px solid #1e1e32;
+    padding: 8px 24px;
+    font-size: 11px;
+    color: #4caf50;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .log-bar span { color: #444; }
+
+  /* Colores por categoría */
+  .cat-mov  { --cat-color: #3c78dc; }
+  .cat-comb { --cat-color: #dc3c3c; }
+  .cat-conf { --cat-color: #3caa5a; }
+  .cat-game { --cat-color: #aa5adc; }
+  .cat-ext  { --cat-color: #c8961e; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🤖 BOT REMOTE CONTROL</h1>
+  <div>
+    <span class="status-dot" id="dot"></span>
+    <span id="status-text">Conectando...</span>
+  </div>
+</div>
+
+<div class="config-bar">
+  <label>TOKEN</label>
+  <input type="password" id="token-input" placeholder="ghp_..." value="">
+
+  <label>REPO</label>
+  <input type="text" id="repo-input" value="ivanperezal123-cmd/ipal-bc-x7k2m" style="width:260px">
+
+  <label>TARGET</label>
+  <input type="text" id="target-input" placeholder="all / nombre bot" value="all">
+
+  <label>ARG</label>
+  <input type="text" id="arg-input" placeholder="argumento (ej: pan, 2, alan juan)">
+</div>
+
+<div class="tabs" id="tabs"></div>
+<div class="content" id="content"></div>
+
+<div class="log-bar">
+  <span>ÚLTIMO COMANDO:</span>
+  <span id="log-text">—</span>
+</div>
+
+<script>
+const CATEGORIES = [
+  { name:"Movimiento", cls:"cat-mov", cmds:[
+    ["follow",      "Seguir al owner"],
+    ["unfollow",    "Dejar de seguir"],
+    ["pathfind",    "Ir con pathfind"],
+    ["unpathfind",  "Cancelar pathfind"],
+    ["tp",          "Teleport al owner"],
+    ["goto",        "Ir a jugador"],
+    ["speed",       "Velocidad (arg: N)"],
+    ["jump",        "JumpPower (arg: N)"],
+    ["freeze",      "Congelar"],
+    ["unfreeze",    "Descongelar"],
+    ["noclip",      "Noclip ON"],
+    ["clip",        "Noclip OFF"],
+    ["fly",         "Volar (arg: vel)"],
+    ["unfly",       "Dejar de volar"],
+    ["resetear",    "Resetear personaje"],
+    ["followdist",  "Dist. follow (arg: N)"],
+  ]},
+  { name:"Combate", cls:"cat-comb", cmds:[
+    ["defensa1",    "Guerra de Torres 🏰"],
+    ["undefensa1",  "Detener defensa1"],
+    ["defensa2",    "Defensa básica"],
+    ["defensa3",    "Defensa 3"],
+    ["undefensa3",  "Detener defensa3"],
+    ["defensa4",    "Defensa 4 JJK"],
+    ["undefensa4",  "Detener defensa4"],
+    ["super",       "Super modo"],
+    ["unsuper",     "Detener super"],
+    ["super2",      "Super 2"],
+    ["unsuper2",    "Detener super2"],
+    ["turno",       "Turnos (arg: N)"],
+    ["unturno",     "Detener turno"],
+    ["kill",        "Matar (arg: nombre)"],
+    ["killall",     "Matar a todos"],
+    ["fling",       "Fling (arg: nombre)"],
+    ["target",      "Fijar objetivo"],
+    ["untarget",    "Quitar objetivo"],
+    ["mahoraga",    "Mahoraga ON"],
+    ["unmahoraga",  "Mahoraga OFF"],
+  ]},
+  { name:"Config", cls:"cat-conf", cmds:[
+    ["addowner",       "Añadir owner"],
+    ["removeowner",    "Quitar owner"],
+    ["owners",         "Ver owners"],
+    ["addpreowner",    "Añadir preowner"],
+    ["removepreowner", "Quitar preowner"],
+    ["godmode",        "Godmode ON"],
+    ["ungodmode",      "Godmode OFF"],
+    ["invisible",      "Invisible"],
+    ["visible",        "Visible"],
+    ["silenciar",      "Mutear bot"],
+    ["hablar",         "Desmutear bot"],
+    ["size",           "Tamaño (arg: N)"],
+    ["alias",          "Crear alias"],
+    ["unalias",        "Borrar alias"],
+    ["salir",          "Bot al menú"],
+    ["rejoin",         "Rejoin"],
+  ]},
+  { name:"Juegos", cls:"cat-game", cmds:[
+    ["explora2",    "Explorar 2"],
+    ["unexplora2",  "Detener explora2"],
+    ["explora",     "Explorar básico"],
+    ["stopexplora", "Detener explora"],
+    ["panico",      "Modo pánico"],
+    ["stopanico",   "Detener pánico"],
+    ["escondete",   "Esconderse"],
+    ["sal",         "Salir escondite"],
+    ["investiga",   "Investigar"],
+    ["camina",      "Caminar"],
+    ["corre",       "Correr"],
+    ["serverhop",   "Cambiar servidor"],
+  ]},
+  { name:"Extras", cls:"cat-ext", cmds:[
+    ["say",       "Decir (arg: texto)"],
+    ["spam",      "Spam (arg: texto)"],
+    ["stopspam",  "Detener spam"],
+    ["hablarle",  "Hablarle a jugador"],
+    ["dance",     "Bailar"],
+    ["wave",      "Saludar"],
+    ["sit",       "Sentarse"],
+    ["tpose",     "T-pose"],
+    ["shrug",     "Encogerse"],
+    ["stopemote", "Detener emote"],
+    ["heal",      "Curar"],
+    ["respawn",   "Respawnear"],
+    ["pos",       "Ver posición"],
+    ["ping",      "Ping"],
+    ["info",      "Info del bot"],
+    ["bots",      "Bots online"],
+  ]},
+]
+
+// ── Generar UI ────────────────────────────────────────────────────
+const tabsEl   = document.getElementById('tabs')
+const contentEl= document.getElementById('content')
+
+CATEGORIES.forEach((cat, i) => {
+  // Tab
+  const tab = document.createElement('button')
+  tab.className = 'tab' + (i===0?' active':'')
+  tab.textContent = cat.name
+  tab.style.setProperty('--cat-color', getCatColor(cat.cls))
+  if(i===0) tab.style.borderBottom = '2px solid '+getCatColor(cat.cls)
+  tab.onclick = () => switchTab(i)
+  tabsEl.appendChild(tab)
+
+  // Panel
+  const panel = document.createElement('div')
+  panel.className = 'tab-panel ' + cat.cls + (i===0?' active':'')
+  cat.cmds.forEach(([cmd, desc]) => {
+    const btn = document.createElement('div')
+    btn.className = 'cmd-btn ' + cat.cls
+    btn.innerHTML = `<div class="bar"></div><span class="name">${cmd}</span><span class="desc">${desc}</span>`
+    btn.onclick = () => sendCommand(cmd, btn)
+    panel.appendChild(btn)
+  })
+  contentEl.appendChild(panel)
+})
+
+function getCatColor(cls) {
+  const map = {
+    'cat-mov':'#3c78dc','cat-comb':'#dc3c3c',
+    'cat-conf':'#3caa5a','cat-game':'#aa5adc','cat-ext':'#c8961e'
+  }
+  return map[cls] || '#888'
+}
+
+let activeTab = 0
+function switchTab(i) {
+  document.querySelectorAll('.tab').forEach((t,j) => {
+    t.classList.toggle('active', j===i)
+    t.style.borderBottom = j===i ? '2px solid '+getCatColor(CATEGORIES[j].cls) : ''
+  })
+  document.querySelectorAll('.tab-panel').forEach((p,j) => p.classList.toggle('active', j===i))
+  activeTab = i
+}
+
+// ── Enviar comando via GitHub API ─────────────────────────────────
+let cmdId = Date.now()
+
+async function sendCommand(cmd, btnEl) {
+  const token  = document.getElementById('token-input').value.trim()
+  const repo   = document.getElementById('repo-input').value.trim()
+  const target = document.getElementById('target-input').value.trim() || 'all'
+  const args   = document.getElementById('arg-input').value.trim()
+
+  if (!token) { alert('Ponés el token primero'); return }
+
+  cmdId++
+  const payload = { cmd, args, target, id: String(cmdId) }
+  const content = btoa(JSON.stringify(payload) + '\n')
+
+  // Obtener SHA actual del archivo
+  let sha = ''
+  try {
+    const r = await fetch(`https://api.github.com/repos/${repo}/contents/cmd.json`, {
+      headers: { 'Authorization': 'token ' + token, 'Accept': 'application/vnd.github.v3+json' }
+    })
+    const data = await r.json()
+    sha = data.sha || ''
+  } catch(e) {}
+
+  // Actualizar archivo
+  try {
+    const r = await fetch(`https://api.github.com/repos/${repo}/contents/cmd.json`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': 'token ' + token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github.v3+json'
+      },
+      body: JSON.stringify({
+        message: `cmd: ${cmd}`,
+        content: content,
+        sha: sha
+      })
+    })
+    if (r.ok) {
+      document.getElementById('log-text').textContent =
+        `[${target}] !${cmd}${args?' '+args:''} — OK ✅`
+      // Flash visual
+      btnEl.classList.add('flash')
+      setTimeout(() => btnEl.classList.remove('flash'), 150)
+      setStatus(true, 'Comando enviado')
+    } else {
+      const err = await r.json()
+      document.getElementById('log-text').textContent = '❌ Error: ' + (err.message || r.status)
+      setStatus(false, 'Error al enviar')
+    }
+  } catch(e) {
+    document.getElementById('log-text').textContent = '❌ ' + e.message
+    setStatus(false, 'Sin conexión')
+  }
+}
+
+// ── Status ────────────────────────────────────────────────────────
+function setStatus(ok, text) {
+  document.getElementById('dot').className = 'status-dot' + (ok?' online':'')
+  document.getElementById('status-text').textContent = text
+}
+
+// Verificar conexión al cargar
+window.addEventListener('load', async () => {
+  // Cargar token guardado
+  const saved = localStorage.getItem('bot_token')
+  if (saved) document.getElementById('token-input').value = saved
+
+  document.getElementById('token-input').addEventListener('change', e => {
+    localStorage.setItem('bot_token', e.target.value)
+  })
+
+  setStatus(true, 'Listo')
+})
+</script>
+</body>
+</html>
